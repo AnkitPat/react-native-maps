@@ -1,12 +1,17 @@
 package com.airbnb.android.react.maps;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Environment;
 import android.util.Log;
 
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.Promise;
+import com.facebook.react.bridge.WritableArray;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.Tile;
 import com.google.android.gms.maps.model.TileOverlay;
@@ -18,6 +23,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 
@@ -34,31 +40,56 @@ public class AirMapLocalTile extends AirMapFeature {
         public AIRMapLocalTileProvider(int tileSizet, String pathTemplate) {
             this.tileSize = tileSizet;
             this.pathTemplate = pathTemplate;
-            Log.v("Check>>>C", "Created");
-            for (File file :
-                    getContext().getExternalFilesDirs(null)) {
-                Log.v("Check>>>>", file.getAbsolutePath());
-            }
 
-            SharedPreferences sh = getContext().getSharedPreferences("MySharedPref", Context.MODE_PRIVATE);
+            try {
+
+
+                SharedPreferences sh = getContext().getSharedPreferences("MySharedPref", Context.MODE_PRIVATE);
 
 // The value will be default as empty string because for
 // the very first time when the app is opened, there is nothing to show
-            String storageType = sh.getString("storageType", "internal");
-            File[] files = getContext().getExternalFilesDirs(null);
-            if (storageType.equals("external")) {
+                String storageType = sh.getString("storageType", "internal");
+                ArrayList<File> files = getAllExternalFilesDirs();
+                if (storageType.equals("external")) {
 
 
-                if (files.length > 1)
-                    this.path = files[1].getAbsolutePath();
-                else
+                    if (files.size() > 1)
+                        this.path = files.get(1).getAbsolutePath();
+                    else
+                        this.path = getContext().getFilesDir().getAbsolutePath();
+
+                } else {
                     this.path = getContext().getFilesDir().getAbsolutePath();
+                }
 
-            } else {
-                this.path = getContext().getFilesDir().getAbsolutePath();
+                this.flavourName = getBuildConfigValue("VARIANT").toString().toUpperCase();
+            } catch (Exception e) {
+
+                AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+                builder.setMessage("There is some issue with storage on your device, please reinstall application. If issue persist, feedback@acsi.eu")
+                        .setCancelable(false)
+                        .setPositiveButton("Exit", new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int id) {
+//                                AirMapLocalTile.this.finish();
+                                System.exit(0);
+                            }
+                        });
+
+                AlertDialog alert = builder.create();
+                alert.show();
+
             }
+        }
 
-            this.flavourName = getBuildConfigValue("VARIANT").toString().toUpperCase();
+        public ArrayList<File> getAllExternalFilesDirs(){
+            File[] allExternalFilesDirs = getContext().getExternalFilesDirs(null);
+            ArrayList<File> files = new ArrayList<>();
+            for (File f : allExternalFilesDirs) {
+                if (f != null) {
+                    files.add(f);
+                }
+            }
+           return files;
         }
 
         Object getBuildConfigValue(String fieldName) {
