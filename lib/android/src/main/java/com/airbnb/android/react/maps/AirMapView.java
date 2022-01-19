@@ -1007,6 +1007,7 @@ public class AirMapView extends MapView implements GoogleMap.InfoWindowAdapter,
 
   @Override
   public boolean dispatchTouchEvent(MotionEvent ev) {
+     if (map == null) return true;
     gestureDetector.onTouchEvent(ev);
 
     int X = (int)ev.getX();          
