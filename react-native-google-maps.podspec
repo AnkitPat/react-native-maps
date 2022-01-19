@@ -16,7 +16,11 @@ Pod::Spec.new do |s|
   s.source_files  = "lib/ios/AirGoogleMaps/**/*.{h,m}"
   s.compiler_flags = '-DHAVE_GOOGLE_MAPS=1', '-DHAVE_GOOGLE_MAPS_UTILS=1', '-fno-modules'
 
-  s.dependency 'React-Core'
-  s.dependency 'GoogleMaps', '5.1.0'
-  s.dependency 'Google-Maps-iOS-Utils', '3.10.3'
+#   s.dependency 'React-Core'
+#   s.dependency 'GoogleMaps', '5.1.0'
+#   s.dependency 'Google-Maps-iOS-Utils', '3.10.3'
+  
+   s.dependency 'React-Core'
+  s.dependency 'GoogleMaps', '3.5.0'
+  s.dependency 'Google-Maps-iOS-Utils', '2.1.0'
 end
