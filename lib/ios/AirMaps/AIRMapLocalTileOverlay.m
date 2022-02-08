@@ -55,16 +55,20 @@
                 NSLog(@"Failes to prepare statement");
                 NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
                 result(noMaptileImageData, nil);
+                sqlite3_close(_database);
+                return;
             }
             sqlite3_close(_database);
         } else {
             NSLog(@"Failed to open database!");
             NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
             result(noMaptileImageData, nil);
+            return;
         }
         if([packageIDArray count] == 0) {
             NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
             result(noMaptileImageData, nil);
+            return;
         }
         for (int i = 0; i < [packageIDArray count]; i++) {
             sqlite3 *_maptileDatabase;
@@ -88,27 +92,26 @@
                             if(size == 0) {
                                 NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
                                 result(noMaptileImageData, nil);
+                                sqlite3_finalize(statement);
+                                sqlite3_close(_maptileDatabase);
+                                return;
                             } else {
                                 result(imageData, nil);
+                                sqlite3_finalize(statement);
+                                sqlite3_close(_maptileDatabase);
+                                return;
                             }
-                        } else {
-                            NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-                            result(noMaptileImageData, nil);
                         }
                         sqlite3_finalize(statement);
-                    } else {
-                        NSLog(@"Failes to prepare statement");
-                        NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-                        result(noMaptileImageData, nil);
                     }
                     sqlite3_close(_maptileDatabase);
-                } else {
-                    NSLog(@"Failed to open database!");
-                    NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-                    result(noMaptileImageData, nil);
                 }
             }
         }
+        NSLog(@"Failed to open database!");
+        NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+        result(noMaptileImageData, nil);
+        return;
     }
 }
 
