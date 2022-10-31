@@ -6,6 +6,12 @@ import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.os.Environment;
 import android.util.Log;
 
@@ -46,8 +52,8 @@ public class AirMapLocalTile extends AirMapFeature {
 
                 SharedPreferences sh = getContext().getSharedPreferences("MySharedPref", Context.MODE_PRIVATE);
 
-// The value will be default as empty string because for
-// the very first time when the app is opened, there is nothing to show
+                // The value will be default as empty string because for
+                // the very first time when the app is opened, there is nothing to show
                 String storageType = sh.getString("storageType", "internal");
                 ArrayList<File> files = getAllExternalFilesDirs();
                 if (storageType.equals("external")) {
@@ -70,7 +76,7 @@ public class AirMapLocalTile extends AirMapFeature {
                         .setCancelable(false)
                         .setPositiveButton("Exit", new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int id) {
-//                                AirMapLocalTile.this.finish();
+                            //  AirMapLocalTile.this.finish();
                                 System.exit(0);
                             }
                         });
@@ -106,88 +112,216 @@ public class AirMapLocalTile extends AirMapFeature {
 
         @Override
         public Tile getTile(int x, int y, int zoom) {
+            int maximumNativeZ = 14;
+            int minimumZ = 0;
+            byte[] image = null;
+
+            if (zoom > maximumNativeZ) {
+                Log.d("localTile", "scaleLowerZoomTile");
+			    image = scaleLowerZoomTile(x, y, zoom, maximumNativeZ);
+		    }
+
+            if (image == null && zoom <= maximumNativeZ) {
+                Log.d("localTile", "getTileImage");
+                image = getTileImage(x, y, zoom);
+            }
+
+            if (image == null) {
+                Log.d("localTile", "findLowerZoomTileForScaling");
+                int zoomLevelToStart = (zoom > maximumNativeZ) ? maximumNativeZ - 1 : zoom - 1;
+                int minimumZoomToSearch = minimumZ >= zoom - 3 ? minimumZ : zoom - 3;
+                for (int tryZoom = zoomLevelToStart; tryZoom >= minimumZoomToSearch; tryZoom--) {
+                    image = scaleLowerZoomTile(x, y, zoom, tryZoom);
+                    if (image != null) {
+                        break;
+                    }
+                }
+            }
+
+            return image == null ? null : new Tile(this.tileSize, this.tileSize, image);
+        }
+
+	    protected static final int TARGET_TILE_SIZE = 512;
+
+        byte[] scaleLowerZoomTile(int x, int y, int zoom, int maximumZoom) {
+            int overZoomLevel = zoom - maximumZoom;
+            int zoomFactor = 1 << overZoomLevel;
+            
+            int xParent = x >> overZoomLevel;
+            int yParent = y >> overZoomLevel;
+            int zoomParent = zoom - overZoomLevel;
+            
+            int xOffset = x % zoomFactor;;
+            int yOffset = y % zoomFactor;
+
+            byte[] data;
+            Bitmap image = getNewBitmap();
+            Canvas canvas = new Canvas(image);
+            Paint paint = new Paint();
+
+            data = getTileImage(xParent, yParent, zoomParent);
+            if (data == null) return null;
+            
+            Bitmap sourceImage;
+            sourceImage = BitmapFactory.decodeByteArray(data, 0, data.length);
+
+            int subTileSize = this.tileSize / zoomFactor;
+            Rect sourceRect = new Rect(xOffset * subTileSize, yOffset * subTileSize, xOffset * subTileSize + subTileSize , yOffset * subTileSize + subTileSize);
+            Rect targetRect = new Rect(0,0,TARGET_TILE_SIZE, TARGET_TILE_SIZE);
+            canvas.drawBitmap(sourceImage, sourceRect, targetRect, paint);
+            sourceImage.recycle();
+
+            data = bitmapToByteArray(image);
+            image.recycle();
+            return data;
+        }
+
+        Bitmap getNewBitmap() {
+            Bitmap image = Bitmap.createBitmap(TARGET_TILE_SIZE, TARGET_TILE_SIZE, Bitmap.Config.ARGB_8888);
+            image.eraseColor(Color.TRANSPARENT);
+            return image;
+        }
+
+        byte[] bitmapToByteArray(Bitmap bm) {
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            bm.compress(Bitmap.CompressFormat.PNG, 100, bos);
+
+            byte[] data = bos.toByteArray();
+            try {
+                bos.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return data;
+        }
+
+        public byte[] getTileImage(int x, int y, int zoom) {
             // TODO
+
+            SharedPreferences preferences = getContext().getSharedPreferences("react-native", Context.MODE_PRIVATE);
+            String downloadedPackagesIds = preferences.getString("DOWNLOADEDPACKAGEIDS", "");
+            Log.v("downloadedPackagesIds", downloadedPackagesIds);
+
+            String[] packagesArray = downloadedPackagesIds.replace("[", "0,").replace("]", "").split(",");
 
             String path = this.path + "/data/" + this.flavourName + "/";
             Log.v("Check>>>", path);
-            SQLiteDatabase database = SQLiteDatabase.openDatabase(path + "maptilesindex.sqlite", null, 0);
-            String tileQuery = "SELECT PackageID FROM ZoomLevelTileRange WHERE ZoomLevel=? AND (? BETWEEN StartX And EndX) AND  (? BETWEEN StartY And EndY)";
-            Cursor tileCursor = database.rawQuery(tileQuery, new String[]{zoom + "", x + "", y + ""});
-            try {
 
-                if (tileCursor.moveToFirst()) {
-                    ArrayList<Integer> tileRows = new ArrayList<>();
-
-                    do {
-                        int tileRow = tileCursor.getInt(tileCursor.getColumnIndex("PackageID"));
-                        Log.v("Check>>>", tileRow + "," + x + "," + y + "," + zoom + "," + tileCursor);
-                        tileRows.add(tileRow);
-
-                    } while (tileCursor.moveToNext());
-                    tileCursor.close();
-                    database.close();
-                    for (Integer row :
-                            tileRows) {
-                        if (row == 0) {
-                            SQLiteDatabase databaseMapTile = SQLiteDatabase.openDatabase(path + "maptiles.sqlite", null, 0);
-                            String tileQueryMapTile = "SELECT ImageData FROM Tile WHERE ZoomLevel=? AND X=? and Y=?";
-                            Cursor tileCursorMapTile = databaseMapTile.rawQuery(tileQueryMapTile, new String[]{zoom + "", x + "", y + ""});
-                            try {
-                                if (tileCursorMapTile.moveToFirst()) {
-                                    if (!tileCursorMapTile.isAfterLast()) {
-                                        byte[] tileData = tileCursorMapTile.getBlob(tileCursorMapTile.getColumnIndex("ImageData"));
-                                        if (tileData != null) {
-                                            Log.v("Check>>>", tileData.toString());
-                                            byte[] image = tileData;
-                                            return image == null ? TileProvider.NO_TILE : new Tile(this.tileSize, this.tileSize, image);
-
-                                        }
-
-                                    }
-
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            } finally {
-                                tileCursorMapTile.close();
-                                databaseMapTile.close();
-                            }
-                        } else if (new File(path + "maptiles" + row + ".sqlite").exists()) {
-                            SQLiteDatabase databaseMapTile = SQLiteDatabase.openDatabase(path + "maptiles" + row + ".sqlite", null, 0);
-                            String tileQueryMapTile = "SELECT ImageData FROM Tile WHERE ZoomLevel=? AND X=? and Y=?";
-                            Cursor tileCursorMapTile = databaseMapTile.rawQuery(tileQueryMapTile, new String[]{zoom + "", x + "", y + ""});
-                            try {
-                                if (tileCursorMapTile.moveToFirst()) {
-                                    if (!tileCursorMapTile.isAfterLast()) {
-                                        byte[] tileData = tileCursorMapTile.getBlob(tileCursorMapTile.getColumnIndex("ImageData"));
-                                        if (tileData != null) {
-                                            Log.v("Check>>>", tileData.toString());
-                                            byte[] image = tileData;
-                                            return image == null ? new Tile(this.tileSize, this.tileSize, readTileImage(this.path + "/data/no_maptiles1.png")) : new Tile(this.tileSize, this.tileSize, image);
-
-                                        }
-
-                                    }
-
-                                }
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            } finally {
-                                tileCursorMapTile.close();
-                                databaseMapTile.close();
+            for(String i:packagesArray) {
+                int row = Integer.parseInt(i);
+                SQLiteDatabase databaseMapTile = null;
+                Log.v("packagesArray>>>", row + "");
+                if (row == 0 && zoom < 9) {
+                    databaseMapTile = SQLiteDatabase.openDatabase(path + "maptiles.sqlite", null, 0);
+                } else if(row == 0) {
+                    continue;
+                } else if(new File(path + "maptiles" + row + ".sqlite").exists()) {
+                    databaseMapTile = SQLiteDatabase.openDatabase(path + "maptiles" + row + ".sqlite", null, 0);
+                }
+                String tileQueryMapTile = "SELECT ImageData FROM Tile WHERE ZoomLevel=? AND X=? and Y=?";
+                Cursor tileCursorMapTile = databaseMapTile.rawQuery(tileQueryMapTile, new String[]{zoom + "", x + "", y + ""});
+                try {
+                    if (tileCursorMapTile.moveToFirst()) {
+                        if (!tileCursorMapTile.isAfterLast()) {
+                            byte[] tileData = tileCursorMapTile.getBlob(tileCursorMapTile.getColumnIndex("ImageData"));
+                            if (tileData != null) {
+                                Log.v("Check>>>", tileData.toString());
+                                byte[] image = tileData;
+                                return image;
+                                // return image == null ? new Tile(this.tileSize, this.tileSize, readTileImage(this.path + "/data/no_maptiles1.png")) : new Tile(this.tileSize, this.tileSize, image);
                             }
                         }
                     }
-
+                } catch (Exception e) {
+                    e.printStackTrace();
+                } finally {
+                    tileCursorMapTile.close();
+                    databaseMapTile.close();
                 }
-            } catch (Exception e) {
-                Log.v("Check>>>", e.getMessage());
-            } finally {
-                tileCursor.close();
-                database.close();
             }
 
-            return new Tile(this.tileSize, this.tileSize, readTileImage(this.path + "/data/no_maptiles1.png"));
+            // String path = this.path + "/data/" + this.flavourName + "/";
+            // Log.v("Check>>>", path);
+            // SQLiteDatabase database = SQLiteDatabase.openDatabase(path + "maptilesindex.sqlite", null, 0);
+            // String tileQuery = "SELECT PackageID FROM ZoomLevelTileRange WHERE ZoomLevel=? AND (? BETWEEN StartX And EndX) AND  (? BETWEEN StartY And EndY)";
+            // Cursor tileCursor = database.rawQuery(tileQuery, new String[]{zoom + "", x + "", y + ""});
+            // try {
+
+            //     if (tileCursor.moveToFirst()) {
+            //         ArrayList<Integer> tileRows = new ArrayList<>();
+
+            //         do {
+            //             int tileRow = tileCursor.getInt(tileCursor.getColumnIndex("PackageID"));
+            //             Log.v("Check>>>", tileRow + "," + x + "," + y + "," + zoom + "," + tileCursor);
+            //             tileRows.add(tileRow);
+
+            //         } while (tileCursor.moveToNext());
+            //         tileCursor.close();
+            //         database.close();
+            //         for (Integer row :
+            //                 tileRows) {
+            //             if (row == 0) {
+            //                 SQLiteDatabase databaseMapTile = SQLiteDatabase.openDatabase(path + "maptiles.sqlite", null, 0);
+            //                 String tileQueryMapTile = "SELECT ImageData FROM Tile WHERE ZoomLevel=? AND X=? and Y=?";
+            //                 Cursor tileCursorMapTile = databaseMapTile.rawQuery(tileQueryMapTile, new String[]{zoom + "", x + "", y + ""});
+            //                 try {
+            //                     if (tileCursorMapTile.moveToFirst()) {
+            //                         if (!tileCursorMapTile.isAfterLast()) {
+            //                             byte[] tileData = tileCursorMapTile.getBlob(tileCursorMapTile.getColumnIndex("ImageData"));
+            //                             if (tileData != null) {
+            //                                 Log.v("Check>>>", tileData.toString());
+            //                                 byte[] image = tileData;
+            //                                 return image;
+            //                                 // return image == null ? null : new Tile(this.tileSize, this.tileSize, image);
+
+            //                             }
+
+            //                         }
+
+            //                     }
+            //                 } catch (Exception e) {
+            //                     e.printStackTrace();
+            //                 } finally {
+            //                     tileCursorMapTile.close();
+            //                     databaseMapTile.close();
+            //                 }
+            //             } else if (new File(path + "maptiles" + row + ".sqlite").exists()) {
+            //                 SQLiteDatabase databaseMapTile = SQLiteDatabase.openDatabase(path + "maptiles" + row + ".sqlite", null, 0);
+            //                 String tileQueryMapTile = "SELECT ImageData FROM Tile WHERE ZoomLevel=? AND X=? and Y=?";
+            //                 Cursor tileCursorMapTile = databaseMapTile.rawQuery(tileQueryMapTile, new String[]{zoom + "", x + "", y + ""});
+            //                 try {
+            //                     if (tileCursorMapTile.moveToFirst()) {
+            //                         if (!tileCursorMapTile.isAfterLast()) {
+            //                             byte[] tileData = tileCursorMapTile.getBlob(tileCursorMapTile.getColumnIndex("ImageData"));
+            //                             if (tileData != null) {
+            //                                 Log.v("Check>>>", tileData.toString());
+            //                                 byte[] image = tileData;
+            //                                 return image;
+            //                                 // return image == null ? null : new Tile(this.tileSize, this.tileSize, image);
+
+            //                             }
+
+            //                         }
+
+            //                     }
+            //                 } catch (Exception e) {
+            //                     e.printStackTrace();
+            //                 } finally {
+            //                     tileCursorMapTile.close();
+            //                     databaseMapTile.close();
+            //                 }
+            //             }
+            //         }
+
+            //     }
+            // } catch (Exception e) {
+            //     Log.v("Check>>>", e.getMessage());
+            // } finally {
+            //     tileCursor.close();
+            //     database.close();
+            // }
+
+            return null;
         }
 
         public void setPathTemplate(String pathTemplate) {
