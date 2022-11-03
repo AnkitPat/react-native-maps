@@ -16,7 +16,7 @@
 - (void)loadTileAtPath:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
 {
     if (!result) return;
-
+    
     NSInteger maximumZ = 14;
     [self scaleIfNeededLowerZoomTile:path maximumZ:maximumZ result:^(NSData *image, NSError *error) {
         if (!image ) {
@@ -36,7 +36,7 @@
         [self getTileImage:path result:result];
         return;
     }
-
+    
     NSInteger zoomFactor = 1 << overZoomLevel;
     
     MKTileOverlayPath parentTile;
@@ -48,18 +48,18 @@
     NSInteger xOffset = path.x % zoomFactor;
     NSInteger yOffset = path.y % zoomFactor;
     NSInteger subTileSize = self.tileSize.width / zoomFactor;
-
+    
     if (!_ciContext) _ciContext = [CIContext context];
     if (!_colorspace) _colorspace = CGColorSpaceCreateDeviceRGB();
-
+    
     [self getTileImage:parentTile result:^(NSData *image, NSError *error) {
         if (!image) {
             result(nil, nil);
             return;
         }
-
+        
         CIImage* originalCIImage = [CIImage imageWithData:image];
-
+        
         CGRect rect;
         rect.origin.x = xOffset * subTileSize;
         rect.origin.y = self.tileSize.width - (yOffset + 1) * subTileSize;
@@ -69,10 +69,10 @@
         CIFilter* cropFilter = [CIFilter filterWithName:@"CICrop"];
         [cropFilter setValue:originalCIImage forKey:@"inputImage"];
         [cropFilter setValue:inputRect forKey:@"inputRectangle"];
-
+        
         CGAffineTransform trans = CGAffineTransformMakeScale(zoomFactor, zoomFactor);
         CIImage* scaledCIImage = [cropFilter.outputImage imageByApplyingTransform:trans];
-
+        
         NSData *finalImage = [_ciContext PNGRepresentationOfImage:scaledCIImage format:kCIFormatABGR8 colorSpace:_colorspace options:nil];
         result(finalImage, nil);
     }];
@@ -93,6 +93,12 @@
 
 - (void)getTileImage:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
 {
+    NSLog(@">>>>>>>>>> %d", (long)path.z < 9);
+    NSString *downloadedPackagesString = [[NSUserDefaults standardUserDefaults] stringForKey:@"DOWNLOADEDPACKAGEIDS"];
+    NSData* data = [downloadedPackagesString dataUsingEncoding:NSUTF8StringEncoding];
+    NSMutableArray *downloadedPackages = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:nil];  // if you are expecting  the JSON string to be in form of array else use NSDictionary instead
+    [downloadedPackages addObject: @"0"];
+    NSLog(@">>>>>> Downloaded packages: %@", downloadedPackages);
     NSString *targetName = [NSString stringWithFormat:@""];
     NSArray *targets = @[@"ACSIEurope", @"ACSICampingcard", @"ACSIKfk"];
     int index = (int)[targets indexOfObject: bundle];
@@ -112,96 +118,97 @@
     }
     NSURL *path1 = [[[NSFileManager defaultManager] URLsForDirectory:NSLibraryDirectory
                                                            inDomains:NSUserDomainMask] lastObject];
-    NSString *pathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptilesindex.sqlite", targetName];
-//    NSString *noMaptilePath = [path1.path stringByAppendingPathComponent:@"/LocalDatabase/data/no_maptiles1.png"];
-    NSString *maptileIndexPath = [path1.path stringByAppendingPathComponent:pathToBeAppended];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:maptileIndexPath]) {
-        sqlite3 *_database;
-        NSMutableArray *packageIDArray =  [[NSMutableArray alloc] init];
-        if (sqlite3_open([maptileIndexPath UTF8String], &_database) == SQLITE_OK) {
-            NSString *query = [NSString stringWithFormat:@"SELECT PackageID FROM ZoomLevelTileRange WHERE ZoomLevel=%li AND (%li BETWEEN StartX And EndX) AND (%li BETWEEN StartY And EndY)", (long)path.z, (long)path.x, (long)path.y];
-            sqlite3_stmt *statement;
-            if (sqlite3_prepare_v2(_database, [query UTF8String], -1, &statement, NULL) == SQLITE_OK) {
-                while (sqlite3_step(statement) == SQLITE_ROW) {
-                    int packageID = sqlite3_column_int(statement, 0);
-                    [packageIDArray addObject:[NSNumber numberWithInt:packageID]];
-                }
-                sqlite3_finalize(statement);
-            } else {
-                NSLog(@"Failes to prepare statement");
-//                NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-                result(nil, nil);
-                sqlite3_close(_database);
-                return;
-            }
-            sqlite3_close(_database);
+    //    NSString *pathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptilesindex.sqlite", targetName];
+    ////    NSString *noMaptilePath = [path1.path stringByAppendingPathComponent:@"/LocalDatabase/data/no_maptiles1.png"];
+    //    NSString *maptileIndexPath = [path1.path stringByAppendingPathComponent:pathToBeAppended];
+    //    if ([[NSFileManager defaultManager] fileExistsAtPath:maptileIndexPath]) {
+    //        sqlite3 *_database;
+    //        NSMutableArray *packageIDArray =  [[NSMutableArray alloc] init];
+    //        if (sqlite3_open([maptileIndexPath UTF8String], &_database) == SQLITE_OK) {
+    //            NSString *query = [NSString stringWithFormat:@"SELECT PackageID FROM ZoomLevelTileRange WHERE ZoomLevel=%li AND (%li BETWEEN StartX And EndX) AND (%li BETWEEN StartY And EndY)", (long)path.z, (long)path.x, (long)path.y];
+    //            sqlite3_stmt *statement;
+    //            if (sqlite3_prepare_v2(_database, [query UTF8String], -1, &statement, NULL) == SQLITE_OK) {
+    //                while (sqlite3_step(statement) == SQLITE_ROW) {
+    //                    int packageID = sqlite3_column_int(statement, 0);
+    //                    [packageIDArray addObject:[NSNumber numberWithInt:packageID]];
+    //                }
+    //                sqlite3_finalize(statement);
+    //            } else {
+    //                NSLog(@"Failes to prepare statement");
+    ////                NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+    //                result(nil, nil);
+    //                sqlite3_close(_database);
+    //                return;
+    //            }
+    //            sqlite3_close(_database);
+    //        } else {
+    //            NSLog(@"Failed to open database!");
+    ////            NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+    //            result(nil, nil);
+    //            return;
+    //        }
+    //        if([packageIDArray count] == 0) {
+    ////            NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+    //            result(nil, nil);
+    //            return;
+    //        }
+    for (int i = 0; i < [downloadedPackages count]; i++) {
+        sqlite3 *_maptileDatabase;
+        NSInteger packageID = [downloadedPackages[i] integerValue];
+        NSString *maptilePathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptiles.sqlite", targetName];
+        if(packageID == 0 && (long)path.z < 9) {
+            maptilePathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptiles.sqlite", targetName];
+        } else if (packageID == 0) {
+            continue;
         } else {
-            NSLog(@"Failed to open database!");
-//            NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-            result(nil, nil);
-            return;
+            maptilePathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptiles%@.sqlite", targetName, downloadedPackages[i]];
         }
-        if([packageIDArray count] == 0) {
-//            NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-            result(nil, nil);
-            return;
-        }
-        for (int i = 0; i < [packageIDArray count]; i++) {
-            sqlite3 *_maptileDatabase;
-            NSInteger packageID = [packageIDArray[i] integerValue];
-            NSString *maptilePathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptiles.sqlite", targetName];
-            if(packageID == 0) {
-                maptilePathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptiles.sqlite", targetName];
-            } else {
-                maptilePathToBeAppended = [NSString stringWithFormat:@"/LocalDatabase/data/%@/maptiles%@.sqlite", targetName, packageIDArray[i]];
-            }
-            NSString *maptilePath = [path1.path stringByAppendingPathComponent:maptilePathToBeAppended];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:maptilePath]) {
-                if (sqlite3_open([maptilePath UTF8String], &_maptileDatabase) == SQLITE_OK) {
-                    NSString *query = [NSString stringWithFormat:@"SELECT ImageData FROM Tile WHERE ZoomLevel=%ld AND X=%ld and Y=%ld", (long)path.z, (long)path.x, (long)path.y];
-                    sqlite3_stmt *statement;
-                    if (sqlite3_prepare_v2(_maptileDatabase, [query UTF8String], -1, &statement, NULL) == SQLITE_OK) {
-                        if (sqlite3_step(statement) == SQLITE_ROW) {
-                            const void *ptr = sqlite3_column_blob(statement, 0);
-                            int size = sqlite3_column_bytes(statement, 0);
-                            NSData *imageData = [[NSData alloc] initWithBytes:ptr length:size];
-                            if(size == 0) {
-//                                NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-//                                result(nil, nil);
-                                sqlite3_finalize(statement);
-                                sqlite3_close(_maptileDatabase);
-                                continue;
-                            } else {
-                                result(imageData, nil);
-                                sqlite3_finalize(statement);
-                                sqlite3_close(_maptileDatabase);
-                                return;
-                            }
+        NSString *maptilePath = [path1.path stringByAppendingPathComponent:maptilePathToBeAppended];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:maptilePath]) {
+            if (sqlite3_open([maptilePath UTF8String], &_maptileDatabase) == SQLITE_OK) {
+                NSString *query = [NSString stringWithFormat:@"SELECT ImageData FROM Tile WHERE ZoomLevel=%ld AND X=%ld and Y=%ld", (long)path.z, (long)path.x, (long)path.y];
+                sqlite3_stmt *statement;
+                if (sqlite3_prepare_v2(_maptileDatabase, [query UTF8String], -1, &statement, NULL) == SQLITE_OK) {
+                    if (sqlite3_step(statement) == SQLITE_ROW) {
+                        const void *ptr = sqlite3_column_blob(statement, 0);
+                        int size = sqlite3_column_bytes(statement, 0);
+                        NSData *imageData = [[NSData alloc] initWithBytes:ptr length:size];
+                        if(size == 0) {
+                            //                                NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+                            //                                result(nil, nil);
+                            sqlite3_finalize(statement);
+                            sqlite3_close(_maptileDatabase);
+                            continue;
+                        } else {
+                            result(imageData, nil);
+                            sqlite3_finalize(statement);
+                            sqlite3_close(_maptileDatabase);
+                            return;
                         }
-                        sqlite3_finalize(statement);
                     }
-                    sqlite3_close(_maptileDatabase);
+                    sqlite3_finalize(statement);
                 }
+                sqlite3_close(_maptileDatabase);
             }
         }
-        NSLog(@"Failed to open database!");
-//        NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-        result(nil, nil);
-        return;
     }
+    NSLog(@"Failed to open database!");
+    //        NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+    result(nil, nil);
+    return;
 }
 
 
 - (void)fetchTile:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
 {
     if (!_urlSession) [self createURLSession];
-
+    
     [[_urlSession dataTaskWithURL:[self URLForTilePath:path]
-        completionHandler:^(NSData *data,
-                            NSURLResponse *response,
-                            NSError *error) {
-            result(data, error);
-        }] resume];
+                completionHandler:^(NSData *data,
+                                    NSURLResponse *response,
+                                    NSError *error) {
+        result(data, error);
+    }] resume];
 }
 
 - (void)writeTileImage:(NSURL *)tileCacheFileDirectory withTileCacheFilePath:(NSURL *)tileCacheFilePath withTileData:(NSData *)data
@@ -215,7 +222,7 @@
             return;
         }
     }
-
+    
     [[NSFileManager defaultManager] createFileAtPath:[tileCacheFilePath path] contents:data attributes:nil];
     NSLog(@"tileCache SAVED tile %@", [tileCacheFilePath path]);
 }
@@ -234,9 +241,9 @@
 
 - (void)createURLSession
 {
- if (!_urlSession) {
-     _urlSession = [NSURLSession sharedSession];
- }
+    if (!_urlSession) {
+        _urlSession = [NSURLSession sharedSession];
+    }
 }
 //
 //- (void)checkForRefresh:(MKTileOverlayPath)path fromFilePath:(NSURL *)tileCacheFilePath
@@ -265,7 +272,7 @@
 {
     NSError *error;
     NSDictionary<NSFileAttributeKey, id> *fileAttributes = [[NSFileManager defaultManager] attributesOfItemAtPath:[tileCacheFilePath path] error:&error];
-
+    
     if (fileAttributes) {
         NSDate *modificationDate = fileAttributes[@"NSFileModificationDate"];
         if (modificationDate) {
@@ -274,9 +281,7 @@
             }
         }
     }
-
+    
     return NO;
 }
-
-
 @end
