@@ -31,51 +31,57 @@
 
 - (void)scaleIfNeededLowerZoomTile:(MKTileOverlayPath)path maximumZ:(NSInteger)maximumZ result:(void (^)(NSData *, NSError *))result
 {
-    NSInteger overZoomLevel = path.z - maximumZ;
-    if (overZoomLevel <= 0) {
-        [self getTileImage:path result:result];
-        return;
-    }
-    
-    NSInteger zoomFactor = 1 << overZoomLevel;
-    
-    MKTileOverlayPath parentTile;
-    parentTile.x = path.x >> overZoomLevel;
-    parentTile.y = path.y >> overZoomLevel;
-    parentTile.z = path.z - overZoomLevel;
-    parentTile.contentScaleFactor = path.contentScaleFactor;
-    
-    NSInteger xOffset = path.x % zoomFactor;
-    NSInteger yOffset = path.y % zoomFactor;
-    NSInteger subTileSize = self.tileSize.width / zoomFactor;
-    
-    if (!_ciContext) _ciContext = [CIContext context];
-    if (!_colorspace) _colorspace = CGColorSpaceCreateDeviceRGB();
-    
-    [self getTileImage:parentTile result:^(NSData *image, NSError *error) {
-        if (!image) {
-            result(nil, nil);
+    @try {
+        NSInteger overZoomLevel = path.z - maximumZ;
+        if (overZoomLevel <= 0) {
+            [self getTileImage:path result:result];
             return;
         }
         
-        CIImage* originalCIImage = [CIImage imageWithData:image];
+        NSInteger zoomFactor = 1 << overZoomLevel;
         
-        CGRect rect;
-        rect.origin.x = xOffset * subTileSize;
-        rect.origin.y = self.tileSize.width - (yOffset + 1) * subTileSize;
-        rect.size.width = subTileSize;
-        rect.size.height = subTileSize;
-        CIVector *inputRect = [CIVector vectorWithCGRect:rect];
-        CIFilter* cropFilter = [CIFilter filterWithName:@"CICrop"];
-        [cropFilter setValue:originalCIImage forKey:@"inputImage"];
-        [cropFilter setValue:inputRect forKey:@"inputRectangle"];
+        MKTileOverlayPath parentTile;
+        parentTile.x = path.x >> overZoomLevel;
+        parentTile.y = path.y >> overZoomLevel;
+        parentTile.z = path.z - overZoomLevel;
+        parentTile.contentScaleFactor = path.contentScaleFactor;
         
-        CGAffineTransform trans = CGAffineTransformMakeScale(zoomFactor, zoomFactor);
-        CIImage* scaledCIImage = [cropFilter.outputImage imageByApplyingTransform:trans];
+        NSInteger xOffset = path.x % zoomFactor;
+        NSInteger yOffset = path.y % zoomFactor;
+        NSInteger subTileSize = self.tileSize.width / zoomFactor;
         
-        NSData *finalImage = [_ciContext PNGRepresentationOfImage:scaledCIImage format:kCIFormatABGR8 colorSpace:_colorspace options:nil];
-        result(finalImage, nil);
-    }];
+        if (!_ciContext) _ciContext = [CIContext context];
+        if (!_colorspace) _colorspace = CGColorSpaceCreateDeviceRGB();
+        
+        [self getTileImage:parentTile result:^(NSData *image, NSError *error) {
+            if (!image) {
+                result(nil, nil);
+                return;
+            }
+            
+            CIImage* originalCIImage = [CIImage imageWithData:image];
+            
+            CGRect rect;
+            rect.origin.x = xOffset * subTileSize;
+            rect.origin.y = self.tileSize.width - (yOffset + 1) * subTileSize;
+            rect.size.width = subTileSize;
+            rect.size.height = subTileSize;
+            CIVector *inputRect = [CIVector vectorWithCGRect:rect];
+            CIFilter* cropFilter = [CIFilter filterWithName:@"CICrop"];
+            [cropFilter setValue:originalCIImage forKey:@"inputImage"];
+            [cropFilter setValue:inputRect forKey:@"inputRectangle"];
+            
+            CGAffineTransform trans = CGAffineTransformMakeScale(zoomFactor, zoomFactor);
+            CIImage* scaledCIImage = [cropFilter.outputImage imageByApplyingTransform:trans];
+            
+            NSData *finalImage = [_ciContext PNGRepresentationOfImage:scaledCIImage format:kCIFormatABGR8 colorSpace:_colorspace options:nil];
+            result(finalImage, nil);
+        }];
+    }
+    @catch (NSException *exception) {
+        NSLog(@"%@", exception.reason);
+        result(nil, nil);
+    }
 }
 
 - (void)findLowerZoomTileAndScale:(MKTileOverlayPath)path tryZ:(NSInteger)tryZ minZ:(NSInteger)minZ result:(void (^)(NSData *, NSError *))result
@@ -93,7 +99,7 @@
 
 - (void)getTileImage:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
 {
-    @try{
+    @try {
         NSLog(@">>>>>>>>>> %d", (long)path.z < 9);
         NSString *downloadedPackagesString = [[NSUserDefaults standardUserDefaults] stringForKey:@"DOWNLOADEDPACKAGEIDS"];
         NSData* data = [downloadedPackagesString dataUsingEncoding:NSUTF8StringEncoding];
@@ -193,17 +199,16 @@
                 }
             }
         }
-        NSLog(@"Failed to open database!");
-        //        NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
-        result(nil, nil);
-        return;
-    } @catch (NSException *exception) {
-        // Because we see that sometimes this method causes the app to crash, we've added a try/catch block.
-        // This way the exception will be caught and no tileimage will be returned, but the app will not crash.
-        result(nil,nil);
-        return;
     }
+    @catch (NSException *exception) {
+       NSLog(@"%@", exception.reason);
+    }
+    NSLog(@"Failed to open database!");
+    //        NSData *noMaptileImageData = [NSData dataWithContentsOfFile:noMaptilePath];
+    result(nil, nil);
+    return;
 }
+
 
 - (void)fetchTile:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result
 {
